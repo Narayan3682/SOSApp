@@ -35,10 +35,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() { super.onResume(); tick++ }
 
-    override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
-        super.onRequestPermissionsResult(code, perms, results); tick++
-    }
-
     @Composable
     private fun Screen(prefs: Prefs) {
         var paired by remember { mutableStateOf(prefs.paired) }
