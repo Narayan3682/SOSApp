@@ -7,6 +7,9 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+from .security import body_too_large
 from pydantic import BaseModel, Field
 
 from . import config
@@ -69,8 +72,8 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
 
     class Headers(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
-            if request.headers.get("content-length", "0").isdigit() and int(request.headers["content-length"]) > 16_384:
-                raise HTTPException(413, "payload too large")
+            if body_too_large(request.headers.get("content-length")):
+                return JSONResponse({"detail": "payload too large"}, status_code=413)
             r = await call_next(request)
             r.headers["X-Content-Type-Options"] = "nosniff"
             r.headers["Cache-Control"] = "no-store"

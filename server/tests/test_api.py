@@ -26,6 +26,12 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(ws.receive_json()["type"], "ack")
             self.assertEqual(c.get("/api/members").status_code, 401)
 
+    def test_health_without_body_and_oversized_body(self):
+        with TestClient(create_app(Store(":memory:"), setup_key="t")) as c:
+            self.assertEqual(c.get("/health").json(), {"ok": True})
+            r = c.post("/api/join", content=b"x" * 20_000, headers={"Content-Type": "application/json"})
+            self.assertEqual(r.status_code, 413)
+
     def test_setup_key_enforced_and_lan_key_returned(self):
         with TestClient(create_app(Store(":memory:"), setup_key="k1")) as c:
             body = {"household_name": "Home", "member_name": "N"}
