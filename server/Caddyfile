@@ -1,0 +1,5 @@
+# Public HTTPS with automatic Let's Encrypt certificates.
+# Needs a domain pointing at this machine and ports 80/443 reachable from the internet.
+{$DOMAIN} {
+    reverse_proxy pager:8000
+}

@@ -1,0 +1,25 @@
+services:
+  pager:
+    build: .
+    restart: unless-stopped
+    ports: ["8000:8000"]          # LAN / Tailscale access (http is OK on private networks)
+    env_file: .env
+    volumes:
+      - pager-data:/data
+      # - ./service-account.json:/secrets/service-account.json:ro   # for FCM
+
+  # Optional public HTTPS:  docker compose --profile tls up -d   (set DOMAIN in .env)
+  caddy:
+    image: caddy:2
+    profiles: ["tls"]
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [pager]
+
+volumes:
+  pager-data:
+  caddy-data:

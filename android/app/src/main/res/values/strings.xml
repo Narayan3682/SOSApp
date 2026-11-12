@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Home Pager</string>
+    <string name="widget_description">One-tap emergency alert (5-second cancel window)</string>
+    <string name="accessibility_description">Lets Home Pager detect a volume-button press pattern to send a home emergency alert, even when the screen is off. It does not read or store anything on your screen.</string>
+</resources>

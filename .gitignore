@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+*.db
+.env
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+service-account*.json
+.idea/
