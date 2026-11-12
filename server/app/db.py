@@ -32,6 +32,24 @@ CREATE TABLE IF NOT EXISTS ack (
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 
 
+def normalize_code(code: str) -> str:
+    """Invite codes are case-insensitive; spaces, dashes and dots typed between groups are ignored.
+    If a whole share message was pasted ("Invite code: XXXX YYYY ..."), the code is extracted from it."""
+    text = (code or "").upper()
+    for line in text.splitlines():
+        if "INVITE CODE" in line:
+            text = line.split(":", 1)[-1]
+            break
+    else:
+        # Otherwise take the first whitespace-separated chunk group that forms a valid 8-char code
+        chunks = text.replace("-", " ").replace(".", " ").split()
+        for i in range(len(chunks)):
+            joined = "".join(chunks[i:i + 2])
+            if len(joined) == 8 and all(c in _CODE_ALPHABET for c in joined):
+                return joined
+    return "".join(ch for ch in text if ch.isalnum())
+
+
 def _new_lan_key() -> str:
     """Per-household secret that signs offline (LAN/Nearby) packets so strangers can't forge alarms."""
     return base64.b64encode(secrets.token_bytes(32)).decode()
@@ -94,18 +112,18 @@ class Store:
         now = time.time()
         lan_key = _new_lan_key()
         self._exec("INSERT INTO household VALUES(?,?,?,?,?)", (hid, name, code, now, lan_key))
-        self._exec("INSERT INTO member VALUES(?,?,?,?,?,?)", (mid, hid, member_name, phone, 1, now))
+        self._exec("INSERT INTO member VALUES(?,?,?,?,?,?)", (mid, hid, member_name.strip(), phone, 1, now))
         did, token = self._add_device(mid, hid, device_name, fcm_token)
         return {"household_id": hid, "invite_code": code, "member_id": mid,
                 "device_id": did, "device_token": token, "lan_key": lan_key}
 
     def join(self, invite_code, member_name, device_name, fcm_token=None, phone=None, is_priority=False):
-        h = self._one("SELECT id, lan_key FROM household WHERE invite_code=?", (invite_code.strip().upper(),))
+        h = self._one("SELECT id, lan_key FROM household WHERE invite_code=?", (normalize_code(invite_code),))
         if not h:
             return None
         mid = uuid.uuid4().hex
         self._exec("INSERT INTO member VALUES(?,?,?,?,?,?)",
-                   (mid, h["id"], member_name, phone, int(is_priority), time.time()))
+                   (mid, h["id"], member_name.strip(), phone, int(is_priority), time.time()))
         did, token = self._add_device(mid, h["id"], device_name, fcm_token)
         return {"household_id": h["id"], "member_id": mid, "device_id": did,
                 "device_token": token, "lan_key": h["lan_key"]}

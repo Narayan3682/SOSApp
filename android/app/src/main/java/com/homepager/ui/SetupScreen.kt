@@ -130,7 +130,8 @@ fun SetupScreen(prefs: Prefs, onDone: () -> Unit) {
                 if (mode == "join") {
                     Muted("Ask the person who created the household for the 8-letter invite code shown on their home screen.")
                     Spacer(Modifier.height(10.dp))
-                    Field(invite, { invite = it.uppercase() }, "Invite code", placeholder = "e.g. KX7PQ2MN")
+                    Field(invite, { invite = extractInvite(it) }, "Invite code",
+                        placeholder = "e.g. KX7P Q2MN", help = "Spaces are fine. The code never contains 0, O, 1 or I.")
                 } else {
                     Muted("Only one person per family creates the household. Everyone else joins with the invite code you get afterwards.")
                     Spacer(Modifier.height(10.dp))
@@ -143,7 +144,7 @@ fun SetupScreen(prefs: Prefs, onDone: () -> Unit) {
                 Row {
                     GhostButton("Back", Modifier.weight(1f)) { err = ""; step = 2 }
                     Spacer(Modifier.width(10.dp))
-                    val ready = !busy && if (mode == "join") invite.length >= 6 else household.isNotBlank()
+                    val ready = !busy && if (mode == "join") invite.replace(" ", "").length >= 6 else household.isNotBlank()
                     BigButton(if (busy) "Please wait…" else if (mode == "join") "Join" else "Create", Modifier.weight(1f), enabled = ready) {
                         if (mode == "join") bg({ api.join(server, invite, name, device, phone, pin) }, onDone)
                         else bg({ api.createHousehold(server, household, name, device, phone, setupKey, pin) }, onDone)
@@ -155,6 +156,16 @@ fun SetupScreen(prefs: Prefs, onDone: () -> Unit) {
         Muted("Home Pager is not a certified emergency service. In danger, call 112 first.", 12)
         Spacer(Modifier.height(24.dp))
     }
+}
+
+/** Accepts a bare code, a spaced code, or a whole pasted share message and keeps only the code. */
+internal fun extractInvite(raw: String): String {
+    val up = raw.uppercase()
+    val fromLabel = up.lines().firstOrNull { "INVITE CODE" in it }?.substringAfter(":")
+    val candidate = fromLabel ?: up
+    val m = Regex("[A-HJ-NP-Z2-9]{4}[\\s-]?[A-HJ-NP-Z2-9]{4}").find(candidate)
+    if (m != null) return m.value.filter { it.isLetterOrDigit() }
+    return candidate.filter { it.isLetterOrDigit() || it == ' ' }.take(12)
 }
 
 @Composable

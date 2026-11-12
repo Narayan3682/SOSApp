@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from . import config
 from .security import setup_key_ok
-from .db import Store
+from .db import Store, normalize_code
 from .hub import Hub
 from .ratelimit import RateLimiter
 from .service import AlertService
@@ -114,6 +114,10 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
         r = app.state.store.join(body.invite_code, body.member_name, body.device_name,
                                  body.fcm_token, body.phone)
         if not r:
+            # Wrong codes are not secrets; showing exactly what arrived is the fastest way to spot a typo or stray character.
+            logging.getLogger("pager").warning(
+                "join refused: received invite code %r -> normalised %r (name %r). Look-alikes: B/8, V/U, 6/G, S/5, Z/2",
+                body.invite_code, normalize_code(body.invite_code), body.member_name)
             raise HTTPException(404, "unknown invite code")
         return r
 

@@ -111,12 +111,12 @@ class MainActivity : ComponentActivity() {
                 Label("INVITE FAMILY")
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(prefs.inviteCode.ifEmpty { "—" }, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp,
-                        modifier = Modifier.weight(1f))
+                    Text(prefs.inviteCode.chunked(4).joinToString(" ").ifEmpty { "—" }, fontSize = 30.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.weight(1f))
                     FilledTonalButton(onClick = { share(prefs) }) { Text("Share") }
                 }
                 Spacer(Modifier.height(6.dp))
-                Muted("Others install the app, enter the same server, then join with this code. No limit on devices.")
+                Muted("Others install the app, enter the same server, then join with this code. Letters only - there is no 0, O, 1 or I. No limit on devices.")
                 Spacer(Modifier.height(6.dp))
                 Muted("Server: ${prefs.serverUrl}", 12)
             }
@@ -220,7 +220,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun share(prefs: Prefs) {
-        val text = "Join our Home Pager household.\nServer: ${prefs.serverUrl}\nInvite code: ${prefs.inviteCode}"
+        val text = "Home Pager invite code: ${prefs.inviteCode.chunked(4).joinToString(" ")}\n" +
+            "Install the app, enter server ${prefs.serverUrl} and paste this whole message into the invite field."
         (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", text))
         Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share invite"))

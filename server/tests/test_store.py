@@ -16,6 +16,21 @@ class StoreTests(unittest.TestCase):
         self.assertIsNone(self.s.authenticate("bogus"))
         self.assertIsNone(self.s.join("NOPE1234", "X", "y"))
 
+    def test_join_tolerates_spacing_case_and_trims_names(self):
+        code = self.h["invite_code"]
+        spaced = f" {code[:4].lower()} - {code[4:]} "
+        j = self.s.join(spaced, "  Mom ", "galaxy")
+        self.assertIsNotNone(j)
+        self.assertEqual(self.s.authenticate(j["device_token"])["member_name"], "Mom")
+        self.assertIsNone(self.s.join(code[:7] + ("A" if code[7] != "A" else "B"), "X", "y"))  # one wrong char still fails
+
+    def test_join_accepts_a_pasted_share_message(self):
+        code = self.h["invite_code"]
+        pasted = f"Join our Home Pager household.\nServer: https://192.168.0.101:8443\nInvite code: {code[:4]} {code[4:]}"
+        self.assertIsNotNone(self.s.join(pasted, "Mom", "galaxy"))
+        self.assertIsNotNone(self.s.join(f"{code}\nSERVER: HTTPS://X\nINVITE CODE: {code}", "Dad", "pixel"))
+        self.assertIsNotNone(self.s.join(f"code {code[:4]}-{code[4:]} thanks", "Kid", "nord"))
+
     def test_no_device_limit(self):
         for i in range(25):
             self.assertIsNotNone(self.s.join(self.h["invite_code"], f"m{i}", f"d{i}"))
