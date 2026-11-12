@@ -32,7 +32,7 @@
         android:label="Home Pager"
         android:allowBackup="false"
         android:usesCleartextTraffic="${cleartext}"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.HomePager">
 
         <activity android:name=".ui.MainActivity" android:exported="true">
             <intent-filter>

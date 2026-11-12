@@ -28,6 +28,22 @@ public class ServerUrlPolicyTest {
         bad("http://10.evil.com"); bad("http://192.168.1.10.evil.com"); bad("http://300.1.1.1");
     }
 
+    @Test public void wildcardAddressGivesActionableMessage() {
+        String m = ServerUrlPolicy.validate("http://0.0.0.0:8000");
+        assertNotNull(m);
+        assertTrue(m.contains("ipconfig"));
+        assertNotNull(ServerUrlPolicy.validate("https://0.0.0.0"));
+    }
+
+    @Test public void hintWarnsAboutLoopbackOnly() {
+        assertNotNull(ServerUrlPolicy.hint("http://localhost:8000"));
+        assertNotNull(ServerUrlPolicy.hint("http://127.0.0.1:8000"));
+        assertNull(ServerUrlPolicy.hint("http://192.168.1.10:8000"));
+        assertNull(ServerUrlPolicy.hint("http://10.0.2.2:8000"));   // Android emulator -> host PC
+        assertNull(ServerUrlPolicy.hint("garbage"));
+        assertNull(ServerUrlPolicy.hint(null));
+    }
+
     @Test public void malformedRejected() {
         bad(null); bad(""); bad("   "); bad("192.168.1.10:8000"); bad("ftp://192.168.1.10");
         bad("http://"); bad("http://:8000"); bad("http://192.168.1.10:99999"); bad("http://192.168.1.10:abc");

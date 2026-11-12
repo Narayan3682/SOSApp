@@ -10,3 +10,4 @@ android/local.properties
 *.jks
 service-account*.json
 .idea/
+certs/

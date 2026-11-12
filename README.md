@@ -9,16 +9,21 @@ Emergency pager for the home using Android phones. Any phone can raise an alert;
 - `android/` - Kotlin + Jetpack Compose app, two flavors: `family` (sideload, all triggers) and `play` (Play-Store-safe subset).
 - `docs/ARCHITECTURE.md` - design, delivery tiers, status.
 
-## Run the server
+## Run the server (HTTPS)
 ```
 cd server
 python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-set PAGER_DB_PATH=pager.db
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+python run.py
 ```
-or `docker compose up --build` (copy `.env.example` to `.env` first).
-Tests: `python -m unittest discover -s tests` (the HTTP test needs fastapi + httpx installed).
+First start prints two things you need on the phones: the **certificate fingerprint** and the **setup key**.
+Allow the port once (PowerShell as Administrator, Private networks only):
+```
+New-NetFirewallRule -DisplayName "Home Pager 8443" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow -Profile Private
+```
+Find the PC's IP with `ipconfig` (IPv4 Address). Phones use `https://<that-ip>:8443`.
+Docker alternative: `docker compose up --build` (http on 8000; add `--profile tls` with a real domain for Let's Encrypt, see docs/TLS.md).
+Tests: `python -m unittest discover -s tests`. Security model: docs/SECURITY.md.
 
 ## Get the APK
 Option A - GitHub Actions (no local tooling): push this folder to a GitHub repo; the `Build` workflow runs server + Android unit tests, builds the debug APK and attaches it as artifact `HomePager-family-debug-apk`. Download, copy to the phone, install (allow "unknown sources").

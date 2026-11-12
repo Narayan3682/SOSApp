@@ -14,10 +14,10 @@ import com.homepager.alarm.AlarmController
 import com.homepager.core.AlertBus
 import com.homepager.core.Prefs
 import com.homepager.net.Api
+import com.homepager.net.Tls
 import com.homepager.net.LanTransport
 import com.homepager.net.NearbyTransport
 import com.homepager.push.FcmSync
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -32,8 +32,6 @@ import kotlin.concurrent.thread
  */
 class PagerService : Service() {
     private val handler = Handler(android.os.Looper.getMainLooper())
-    private val client: OkHttpClient = Api.http.newBuilder()
-        .readTimeout(0, TimeUnit.MILLISECONDS).pingInterval(25, TimeUnit.SECONDS).build()
     private var socket: WebSocket? = null
     private var lan: LanTransport.Receiver? = null
     private var backoff = 1_000L
@@ -57,6 +55,10 @@ class PagerService : Service() {
         val prefs = Prefs(this)
         if (!prefs.paired || stopped) return
         val url = prefs.serverUrl.replaceFirst("http", "ws") + "/ws"   // https -> wss
+        val client = try {
+            Tls.client(prefs.serverUrl, prefs.certPin).newBuilder()
+                .readTimeout(0, TimeUnit.MILLISECONDS).pingInterval(25, TimeUnit.SECONDS).build()
+        } catch (e: IllegalArgumentException) { AlertBus.post("Server not verified - open the app and set up again"); return }
         socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, r: Response) {
                 ws.send(JSONObject().put("type", "auth").put("token", prefs.token).toString())

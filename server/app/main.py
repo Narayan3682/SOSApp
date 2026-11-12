@@ -1,9 +1,12 @@
 import asyncio
 import json
+import logging
+import secrets
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 
 from . import config
@@ -48,6 +51,13 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.store = store or Store(config.DB_PATH)
+        # Creating a household always needs a key: use SETUP_KEY, else one generated once and kept in the DB.
+        key = required_key or app.state.store.meta("setup_key")
+        if not key:
+            key = secrets.token_urlsafe(12)
+            app.state.store.set_meta("setup_key", key)
+        app.state.setup_key = key
+        logging.getLogger("pager").warning("Setup key (needed once, to create the household): %s", key)
         app.state.hub = Hub()
         app.state.svc = AlertService(app.state.store, app.state.hub)
         # A restart must not silently drop alerts that nobody has answered yet.
@@ -55,7 +65,21 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
             app.state.svc.start_escalation(a["id"], a["sender_name"])
         yield
 
-    app = FastAPI(title="Home Pager", lifespan=lifespan)
+    app = FastAPI(title="Home Pager", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+    class Headers(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            if request.headers.get("content-length", "0").isdigit() and int(request.headers["content-length"]) > 16_384:
+                raise HTTPException(413, "payload too large")
+            r = await call_next(request)
+            r.headers["X-Content-Type-Options"] = "nosniff"
+            r.headers["Cache-Control"] = "no-store"
+            r.headers["Referrer-Policy"] = "no-referrer"
+            if request.url.scheme == "https":
+                r.headers["Strict-Transport-Security"] = "max-age=31536000"
+            return r
+
+    app.add_middleware(Headers)
     limiter = RateLimiter(limit=10, window_s=60)
 
     def throttle(request: Request) -> None:
@@ -77,7 +101,7 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
 
     @app.post("/api/households")
     def create_household(body: HouseholdIn, _: None = Depends(throttle)):
-        if not setup_key_ok(required_key, body.setup_key):
+        if not setup_key_ok(app.state.setup_key, body.setup_key):
             raise HTTPException(403, "invalid setup key")
         return app.state.store.create_household(
             body.household_name, body.member_name, body.device_name, body.fcm_token, body.phone)

@@ -17,6 +17,8 @@ class Prefs(ctx: Context) {
     var memberName: String get() = s("member"); set(v) = put("member", v)
     var phone: String get() = s("phone"); set(v) = put("phone", v)
     /** Base64 household secret that signs/verifies offline (LAN/Nearby) packets. */
+    /** SHA-256 fingerprint of the server certificate accepted at setup (https only). */
+    var certPin: String get() = s("pin"); set(v) = put("pin", v.uppercase())
     var lanKey: String get() = s("lankey"); set(v) = put("lankey", v)
     /** Cached [{"name","phone","priority"}] so SMS fallback works with no internet. */
     var contactsJson: String get() = s("contacts").ifEmpty { "[]" }; set(v) = put("contacts", v)

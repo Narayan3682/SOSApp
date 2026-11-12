@@ -1,139 +1,228 @@
 package com.homepager.ui
 
-import android.os.Build
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.homepager.BuildConfig
 import com.homepager.core.AlertBus
 import com.homepager.core.Prefs
-import com.homepager.core.ServerUrlPolicy
 import com.homepager.core.Trigger
-import com.homepager.net.Api
 import com.homepager.push.FcmSync
 import com.homepager.service.PagerService
-import kotlin.concurrent.thread
 
 class MainActivity : ComponentActivity() {
     private var tick by mutableIntStateOf(0)   // bumped on resume so the checklist re-evaluates
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val prefs = Prefs(this)
         if (prefs.paired) PagerService.start(this)
-        setContent { MaterialTheme { Screen(prefs) } }
+        setContent {
+            PagerTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Box(Modifier.safeDrawingPadding()) { Root(prefs) }
+                }
+            }
+        }
     }
 
     override fun onResume() { super.onResume(); tick++ }
 
     @Composable
-    private fun Screen(prefs: Prefs) {
+    private fun Root(prefs: Prefs) {
         var paired by remember { mutableStateOf(prefs.paired) }
-        var statusLine by remember { mutableStateOf(AlertBus.last) }
+        if (!paired) SetupScreen(prefs) { paired = true; PagerService.start(this); FcmSync.register(this) }
+        else HomeScreen(prefs)
+    }
+
+    @Composable
+    private fun HomeScreen(prefs: Prefs) {
+        var status by remember { mutableStateOf(AlertBus.last.ifEmpty { "Connecting…" }) }
         var smsAlways by remember { mutableStateOf(prefs.smsAlways) }
         DisposableEffect(Unit) {
-            val l: (String) -> Unit = { statusLine = it }
+            val l: (String) -> Unit = { status = it }
             AlertBus.listen(l); onDispose { AlertBus.unlisten(l) }
         }
-        Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
-            Text("Home Pager", fontSize = 28.sp)
-            Text("Not a certified emergency service. In danger, call 112 first.", fontSize = 12.sp)
-            Spacer(Modifier.height(16.dp))
-            if (!paired) {
-                Setup(prefs) { paired = true; PagerService.start(this@MainActivity); FcmSync.register(this@MainActivity) }
-            } else {
-                Button(modifier = Modifier.fillMaxWidth().height(120.dp),
-                    onClick = { Trigger.fire(this@MainActivity, "button") }) { Text("SOS", fontSize = 40.sp) }
-                Spacer(Modifier.height(12.dp))
-                Text("Status: $statusLine")
-                if (prefs.inviteCode.isNotEmpty()) Text("Invite code for family: ${prefs.inviteCode}")
-                Text("Server: ${prefs.serverUrl}", fontSize = 12.sp)
-                if (BuildConfig.DIRECT_SMS) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(smsAlways, { smsAlways = it; prefs.smsAlways = it })
-                        Spacer(Modifier.width(8.dp))
-                        Text("Also SMS priority contacts on every alert", fontSize = 13.sp)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                ReadinessCard()
-                Text("Tip: add the SOS widget to your home screen and the SOS tile to Quick Settings.", fontSize = 12.sp)
-            }
-        }
-    }
-
-    @Composable
-    private fun ReadinessCard() {
+        val online = status.startsWith("Connected")
         val items = remember(tick) { Readiness.check(this) }
         val missing = items.count { !it.ok }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                Text(if (missing == 0) "Ready: alarms will ring" else "$missing setup step(s) left - alarms may fail", fontSize = 16.sp)
-                for (item in items) {
-                    Spacer(Modifier.height(8.dp))
+
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Home Pager", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Muted("Hi ${prefs.memberName.ifEmpty { "there" }}", 14)
+                }
+                StatusPill(
+                    when {
+                        online -> "Online"
+                        status.startsWith("Server unreachable") -> "Offline mode"
+                        else -> "Connecting"
+                    },
+                    when {
+                        online -> Palette.Ok
+                        status.startsWith("Server unreachable") -> Palette.Warn
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
+            SosButton { Trigger.fire(this@MainActivity, "button") }
+            Spacer(Modifier.height(10.dp))
+            Text("Tap SOS. You get 5 seconds to cancel before everyone is alerted.",
+                fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (status.contains("coming") || status.contains("re-alerting") || status.startsWith("Alert ")) {
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { StatusPill(status, Palette.Ok) }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            ReadinessCard(items, missing)
+
+            Spacer(Modifier.height(14.dp))
+            SectionCard {
+                Label("INVITE FAMILY")
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(prefs.inviteCode.ifEmpty { "—" }, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp,
+                        modifier = Modifier.weight(1f))
+                    FilledTonalButton(onClick = { share(prefs) }) { Text("Share") }
+                }
+                Spacer(Modifier.height(6.dp))
+                Muted("Others install the app, enter the same server, then join with this code. No limit on devices.")
+                Spacer(Modifier.height(6.dp))
+                Muted("Server: ${prefs.serverUrl}", 12)
+            }
+
+            Spacer(Modifier.height(14.dp))
+            SectionCard {
+                Label("HOW TO TRIGGER")
+                Spacer(Modifier.height(8.dp))
+                TriggerRow("SOS button", "This screen, the home-screen widget, or the SOS tile in Quick Settings.")
+                if (BuildConfig.VOLUME_TRIGGER) {
+                    TriggerRow("Volume keys", "Press Volume Down 3× quickly, or hold Volume Up + Down for 2 s. Works with the screen off.")
+                }
+                TriggerRow("Add the widget", "Long-press your home screen → Widgets → Home Pager SOS.")
+                if (BuildConfig.DIRECT_SMS) {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text((if (item.ok) "OK  " else "FIX ") + item.title, fontSize = 14.sp)
-                            if (!item.ok) Text(item.why, fontSize = 11.sp)
+                            Text("SMS priority contacts on every alert", fontSize = 15.sp)
+                            Muted("Off: SMS only when the server can't be reached.", 12)
                         }
-                        if (!item.ok) Button(onClick = { item.fix(this@MainActivity) }) { Text("Fix") }
+                        Switch(smsAlways, { smsAlways = it; prefs.smsAlways = it })
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text("On Xiaomi / Oppo / Vivo / Samsung also allow 'Autostart' and 'Never sleeping apps' in the phone's own battery settings.", fontSize = 11.sp)
-                TextButton(onClick = { Readiness.openAppSettings(this@MainActivity) }) { Text("Open app settings") }
             }
+
+            Spacer(Modifier.height(14.dp))
+            SectionCard {
+                Label("GOOD TO KNOW")
+                Spacer(Modifier.height(8.dp))
+                Muted("Alerts travel over the internet, your home Wi-Fi, Bluetooth to nearby phones, and SMS at the same time. " +
+                      "Someone answering \"I'm coming\" shows up here.")
+                Spacer(Modifier.height(6.dp))
+                Muted("Home Pager is a household convenience, not a certified emergency service. In danger, call 112 first.", 12)
+            }
+            Spacer(Modifier.height(28.dp))
         }
-        Spacer(Modifier.height(8.dp))
     }
 
     @Composable
-    private fun Setup(prefs: Prefs, onDone: () -> Unit) {
-        var server by remember { mutableStateOf("http://") }
-        var name by remember { mutableStateOf("") }
-        var phone by remember { mutableStateOf("") }
-        var household by remember { mutableStateOf("") }
-        var setupKey by remember { mutableStateOf("") }
-        var invite by remember { mutableStateOf("") }
-        var busy by remember { mutableStateOf(false) }
-        var err by remember { mutableStateOf("") }
-        val api = remember { Api(prefs) }
-        val device = "${Build.MANUFACTURER} ${Build.MODEL}"
-        val urlErr = ServerUrlPolicy.validate(server)
-
-        fun run(block: () -> Unit) {
-            busy = true; err = ""
-            thread {
-                try { block(); runOnUiThread(onDone) } catch (e: Exception) { err = e.message ?: "failed" }
-                busy = false
+    private fun SosButton(onClick: () -> Unit) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(220.dp)
+                    .shadow(24.dp, CircleShape, ambientColor = Palette.Sos, spotColor = Palette.Sos)
+                    .background(Brush.radialGradient(listOf(Palette.Sos, Palette.SosDeep)), CircleShape)
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("SOS", fontSize = 56.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 4.sp)
+                    Text("ALERT FAMILY", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.85f), letterSpacing = 2.sp)
+                }
             }
         }
-        OutlinedTextField(server, { server = it }, label = { Text("Server URL (e.g. http://192.168.1.10:8000 or https://...)") },
-            isError = urlErr != null, modifier = Modifier.fillMaxWidth())
-        if (urlErr != null && server.length > 8) Text(urlErr, fontSize = 12.sp)
-        OutlinedTextField(name, { name = it }, label = { Text("Your name") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(phone, { phone = it }, label = { Text("Your phone number (so family can SMS you offline)") }, modifier = Modifier.fillMaxWidth())
-        val ready = !busy && urlErr == null && name.isNotBlank()
-        Spacer(Modifier.height(12.dp))
-        Text("New household")
-        OutlinedTextField(household, { household = it }, label = { Text("Household name") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(setupKey, { setupKey = it }, label = { Text("Server setup key (if the server requires one)") }, modifier = Modifier.fillMaxWidth())
-        Button(enabled = ready && household.isNotBlank(),
-            onClick = { run { api.createHousehold(server, household, name, device, phone, setupKey) } }) { Text("Create household") }
-        Spacer(Modifier.height(12.dp))
-        Text("...or join an existing one")
-        OutlinedTextField(invite, { invite = it }, label = { Text("Invite code") }, modifier = Modifier.fillMaxWidth())
-        Button(enabled = ready && invite.isNotBlank(),
-            onClick = { run { api.join(server, invite, name, device, phone) } }) { Text("Join") }
-        if (err.isNotEmpty()) Text(err)
+    }
+
+    @Composable
+    private fun ReadinessCard(items: List<Readiness.Item>, missing: Int) {
+        var expanded by remember { mutableStateOf(missing > 0) }
+        SectionCard {
+            Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {
+                Dot(if (missing == 0) Palette.Ok else Palette.Warn, 12)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (missing == 0) "Ready — alarms will ring" else "$missing setup step${if (missing > 1) "s" else ""} left",
+                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Muted(if (missing == 0) "All permissions granted." else "Alarms may be silent or delayed until these are fixed.", 12)
+                }
+                Text(if (expanded) "Hide" else "Show", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            }
+            if (expanded) {
+                Spacer(Modifier.height(10.dp))
+                for (item in items) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Dot(if (item.ok) Palette.Ok else Palette.Warn, 8)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, fontSize = 15.sp)
+                            if (!item.ok) Muted(item.why, 12)
+                        }
+                        if (!item.ok) FilledTonalButton(onClick = { item.fix(this@MainActivity) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("Fix") }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Muted("Xiaomi / Oppo / Vivo / Samsung: also allow Autostart and set battery to \"No restrictions\" in the phone's own settings.", 12)
+                TextButton(onClick = { Readiness.openAppSettings(this@MainActivity) }, contentPadding = PaddingValues(0.dp)) { Text("Open app settings") }
+            }
+        }
+    }
+
+    @Composable
+    private fun TriggerRow(title: String, body: String) {
+        Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
+            Dot(MaterialTheme.colorScheme.primary, 8)
+            Spacer(Modifier.width(10.dp))
+            Column { Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium); Muted(body, 12) }
+        }
+    }
+
+    private fun share(prefs: Prefs) {
+        val text = "Join our Home Pager household.\nServer: ${prefs.serverUrl}\nInvite code: ${prefs.inviteCode}"
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", text))
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share invite"))
     }
 }

@@ -10,13 +10,15 @@ public final class ServerUrlPolicy {
 
     private ServerUrlPolicy() {}
 
-    /** @return null if acceptable, otherwise a message to show the user. */
-    public static String validate(String url) {
-        if (url == null || url.trim().isEmpty()) return "Enter the server URL";
+    /** @return {host, port, error}; error is non-null when the URL is unusable. */
+    private static String[] parse(String url) {
+        if (url == null || url.trim().isEmpty()) return new String[] {null, null, "Enter the server URL"};
         String u = url.trim();
         String lower = u.toLowerCase(Locale.ROOT);
         boolean https = lower.startsWith("https://");
-        if (!https && !lower.startsWith("http://")) return "URL must start with http:// or https://";
+        if (!https && !lower.startsWith("http://")) {
+            return new String[] {null, null, "URL must start with http:// or https://"};
+        }
         String rest = u.substring(https ? 8 : 7);
         int cut = rest.length();
         for (char c : new char[] {'/', '?', '#'}) {
@@ -24,15 +26,16 @@ public final class ServerUrlPolicy {
             if (i >= 0) cut = Math.min(cut, i);
         }
         String authority = rest.substring(0, cut);
-        if (authority.isEmpty() || authority.contains("@") || authority.contains(" ")) return "Invalid server address";
+        String bad = "Invalid server address";
+        if (authority.isEmpty() || authority.contains("@") || authority.contains(" ")) return new String[] {null, null, bad};
         String host = authority, port = null;
         if (authority.startsWith("[")) {
             int end = authority.indexOf(']');
-            if (end < 0) return "Invalid server address";
+            if (end < 0) return new String[] {null, null, bad};
             host = authority.substring(1, end);
             String tail = authority.substring(end + 1);
             if (!tail.isEmpty()) {
-                if (!tail.startsWith(":")) return "Invalid server address";
+                if (!tail.startsWith(":")) return new String[] {null, null, bad};
                 port = tail.substring(1);
             }
         } else {
@@ -42,14 +45,35 @@ public final class ServerUrlPolicy {
                 port = authority.substring(colon + 1);
             }
         }
-        if (host.isEmpty()) return "Invalid server address";
-        if (port != null) {
-            if (!port.matches("\\d{1,5}") || Integer.parseInt(port) < 1 || Integer.parseInt(port) > 65535) {
-                return "Invalid port";
-            }
+        if (host.isEmpty()) return new String[] {null, null, bad};
+        if (port != null && (!port.matches("\\d{1,5}") || Integer.parseInt(port) < 1 || Integer.parseInt(port) > 65535)) {
+            return new String[] {null, null, "Invalid port"};
         }
+        return new String[] {host, port, null};
+    }
+
+    /** @return null if acceptable, otherwise a message to show the user. */
+    public static String validate(String url) {
+        String[] p = parse(url);
+        if (p[2] != null) return p[2];
+        String host = p[0];
+        if (host.equals("0.0.0.0")) {
+            return "0.0.0.0 can't be reached from a phone. Use your PC's IPv4 address (run ipconfig), e.g. http://192.168.1.23:8000";
+        }
+        boolean https = url.trim().toLowerCase(Locale.ROOT).startsWith("https://");
         if (https || isPrivateHost(host)) return null;
         return "Plain http:// is only allowed for home-network addresses. Use https:// (see docs/TLS.md).";
+    }
+
+    /** @return a non-blocking warning for an otherwise valid URL, or null. */
+    public static String hint(String url) {
+        String[] p = parse(url);
+        if (p[2] != null) return null;
+        String h = p[0].toLowerCase(Locale.ROOT);
+        if (h.equals("localhost") || h.equals("::1") || h.startsWith("127.")) {
+            return "localhost points to this phone itself. Use your PC's IPv4 address (run ipconfig).";
+        }
+        return null;
     }
 
     static boolean isPrivateHost(String host) {

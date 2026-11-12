@@ -71,5 +71,15 @@ class LanKeyTests(unittest.TestCase):
         self.assertTrue(s.household("h1")["lan_key"])
 
 
+
+class MetaTests(unittest.TestCase):
+    def test_meta_roundtrip_and_replace(self):
+        s = Store(":memory:")
+        self.assertIsNone(s.meta("setup_key"))
+        s.set_meta("setup_key", "abc")
+        s.set_meta("setup_key", "xyz")
+        self.assertEqual(s.meta("setup_key"), "xyz")
+
+
 if __name__ == "__main__":
     unittest.main()

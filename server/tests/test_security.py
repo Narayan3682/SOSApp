@@ -4,9 +4,9 @@ from app.security import setup_key_ok
 
 
 class SetupKeyTests(unittest.TestCase):
-    def test_open_when_no_key_configured(self):
-        self.assertTrue(setup_key_ok("", None))
-        self.assertTrue(setup_key_ok("", "anything"))
+    def test_never_open_without_a_configured_key(self):
+        self.assertFalse(setup_key_ok("", None))
+        self.assertFalse(setup_key_ok("", "anything"))
 
     def test_required_when_configured(self):
         self.assertTrue(setup_key_ok("s3cret", "s3cret"))

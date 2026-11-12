@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS alert (
   sender_device_id TEXT NOT NULL, trigger TEXT NOT NULL, lat REAL, lon REAL,
   status TEXT NOT NULL DEFAULT 'active', escalation_level INTEGER NOT NULL DEFAULT 0,
   created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ack (
   alert_id TEXT NOT NULL REFERENCES alert(id), device_id TEXT NOT NULL,
   via TEXT NOT NULL DEFAULT 'app', created_at REAL NOT NULL, PRIMARY KEY (alert_id, device_id));
@@ -54,6 +55,13 @@ class Store:
             for r in self._c.execute("SELECT id FROM household WHERE lan_key IS NULL").fetchall():
                 self._c.execute("UPDATE household SET lan_key=? WHERE id=?", (_new_lan_key(), r[0]))
             self._c.commit()
+
+    def meta(self, key: str) -> Optional[str]:
+        r = self._one("SELECT value FROM meta WHERE key=?", (key,))
+        return r["value"] if r else None
+
+    def set_meta(self, key: str, value: str):
+        self._exec("INSERT OR REPLACE INTO meta VALUES(?,?)", (key, value))
 
     # -- helpers
     def _one(self, sql, args=()) -> Optional[dict]:

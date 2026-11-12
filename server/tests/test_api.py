@@ -12,8 +12,8 @@ except Exception:  # fastapi/httpx not installed
 @unittest.skipUnless(HAVE, "fastapi + httpx required")
 class ApiTests(unittest.TestCase):
     def test_flow(self):
-        with TestClient(create_app(Store(":memory:"))) as c:
-            h = c.post("/api/households", json={"household_name": "Home", "member_name": "N"}).json()
+        with TestClient(create_app(Store(":memory:"), setup_key="t")) as c:
+            h = c.post("/api/households", json={"household_name": "Home", "member_name": "N", "setup_key": "t"}).json()
             j = c.post("/api/join", json={"invite_code": h["invite_code"], "member_name": "Mom"}).json()
             H = lambda r: {"Authorization": "Bearer " + r["device_token"]}
             with c.websocket_connect("/ws") as ws:
@@ -37,7 +37,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(j["lan_key"], h["lan_key"])   # joining needs only the invite code
 
     def test_pairing_is_rate_limited(self):
-        with TestClient(create_app(Store(":memory:"), setup_key="")) as c:
+        with TestClient(create_app(Store(":memory:"), setup_key="t")) as c:
             codes = [c.post("/api/join", json={"invite_code": "NOPE1234", "member_name": "x"}).status_code
                      for _ in range(12)]
             self.assertEqual(codes[:10], [404] * 10)
