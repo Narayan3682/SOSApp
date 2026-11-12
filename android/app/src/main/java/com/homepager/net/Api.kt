@@ -90,6 +90,18 @@ class Api(private val prefs: Prefs) {
 
     fun sendFcmToken(token: String) { raw("PUT", "/api/devices/fcm", JSONObject().put("fcm_token", token), auth = true) }
 
+    data class Member(val name: String, val online: Boolean, val lastSeen: Long?, val isMe: Boolean)
+
+    fun members(): List<Member> {
+        val rows = JSONArray(raw("GET", "/api/members", null, auth = true))
+        return (0 until rows.length()).map { i ->
+            val m = rows.getJSONObject(i)
+            Member(m.getString("name"), m.optBoolean("online"),
+                if (m.isNull("last_seen")) null else (m.getDouble("last_seen") * 1000).toLong(),
+                m.optString("device_id") == prefs.deviceId)
+        }
+    }
+
     /** Refresh what is needed while offline: household signing key + member phone numbers. */
     fun syncHousehold() {
         val h = obj("GET", "/api/household", null, auth = true)

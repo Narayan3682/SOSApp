@@ -195,6 +195,10 @@ def create_app(store: Optional[Store] = None, setup_key: Optional[str] = None) -
         app.state.hub.add(d["id"], sock)
         app.state.store.touch(d["id"])
         await sock.send_json({"type": "ready", "device_id": d["id"]})
+        # A phone that was asleep/offline must still ring for anything recent and unanswered.
+        for a in app.state.store.pending_for_household(d["household_id"]):
+            if a["sender_device_id"] != d["id"]:
+                await sock.send_json({**app.state.svc.payload(a, a["sender_name"], a["escalation_level"]), "replayed": True})
         try:
             while True:
                 m = json.loads(await sock.receive_text())

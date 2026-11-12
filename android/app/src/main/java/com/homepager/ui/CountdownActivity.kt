@@ -108,7 +108,11 @@ class CountdownActivity : ComponentActivity() {
             color = if (nobody) MaterialTheme.colorScheme.error else Palette.Ok)
         Spacer(Modifier.height(16.dp))
         SectionCard {
-            Line(r.serverOk, if (r.serverOk) "Server: reached ${r.reached} of ${r.total} other phones instantly" else "Server unreachable")
+            Line(r.serverOk && (r.total == 0 || r.reached > 0),
+                if (!r.serverOk) "Server unreachable"
+                else if (r.total == 0) "Server: you are the only member so far"
+                else if (r.reached == r.total) "Server: reached all ${r.total} other phone${if (r.total > 1) "s" else ""} instantly"
+                else "Server: reached ${r.reached} of ${r.total} other phones. The rest ring when their phone reconnects (within ~15 min) - or install FCM push for instant wake-up.")
             Line(r.offlineBroadcast, if (r.offlineBroadcast) "Wi-Fi & nearby phones: broadcast sent (no receipt possible)" else "Wi-Fi & nearby: not available (not yet synced)")
             if (BuildConfig.DIRECT_SMS) Line(r.smsSent > 0,
                 if (r.smsSent > 0) "SMS: sent to ${r.smsSent} contact${if (r.smsSent > 1) "s" else ""}"

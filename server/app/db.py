@@ -184,5 +184,9 @@ class Store:
             " WHERE a.status='active' AND a.created_at>? AND NOT EXISTS"
             " (SELECT 1 FROM ack k WHERE k.alert_id=a.id)", (time.time() - max_age_s,))
 
+    def pending_for_household(self, household_id: str, max_age_s: float = 600):
+        """Active, unanswered alerts a reconnecting phone must still be told about."""
+        return [a for a in self.active_unacked(max_age_s) if a["household_id"] == household_id]
+
     def set_escalation(self, alert_id, level):
         self._exec("UPDATE alert SET escalation_level=? WHERE id=?", (level, alert_id))

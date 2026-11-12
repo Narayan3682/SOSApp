@@ -52,6 +52,13 @@ object Readiness {
             nm.isNotificationPolicyAccessGranted
         ) { a -> open(a, Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) }
 
+        if (Build.VERSION.SDK_INT in 31..32) {
+            val am = ctx.getSystemService(android.app.AlarmManager::class.java)
+            items += Item("Exact alarms", "Lets the app re-check its connection every 15 minutes while the phone sleeps.",
+                am.canScheduleExactAlarms()
+            ) { a -> open(a, Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkg(a))) }
+        }
+
         val nearby = nearbyPermissions()
         items += Item("Offline alerts (Bluetooth / nearby)", "Alerts between phones with no router or internet.",
             nearby.all { granted(ctx, it) }

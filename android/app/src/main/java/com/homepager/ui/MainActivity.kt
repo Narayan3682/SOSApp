@@ -30,6 +30,9 @@ import com.homepager.BuildConfig
 import com.homepager.core.AlertBus
 import com.homepager.core.Prefs
 import com.homepager.core.Trigger
+import com.homepager.net.Api
+import com.google.firebase.FirebaseApp
+import kotlin.concurrent.thread
 import com.homepager.push.FcmSync
 import com.homepager.service.PagerService
 
@@ -104,6 +107,9 @@ class MainActivity : ComponentActivity() {
             }
 
             Spacer(Modifier.height(24.dp))
+            FamilyCard(prefs, online)
+
+            Spacer(Modifier.height(14.dp))
             ReadinessCard(items, missing)
 
             Spacer(Modifier.height(14.dp))
@@ -172,6 +178,54 @@ class MainActivity : ComponentActivity() {
                     Text("ALERT FAMILY", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.85f), letterSpacing = 2.sp)
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun FamilyCard(prefs: Prefs, online: Boolean) {
+        var members by remember { mutableStateOf<List<Api.Member>?>(null) }
+        var err by remember { mutableStateOf(false) }
+        LaunchedEffect(tick, online) {
+            thread { runCatching { Api(prefs).members() }.onSuccess { members = it; err = false }.onFailure { err = true } }
+        }
+        val pushOff = remember { FirebaseApp.getApps(this).isEmpty() }
+        SectionCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Label("FAMILY"); Spacer(Modifier.weight(1f))
+                TextButton(onClick = { tick++ }, contentPadding = PaddingValues(0.dp)) { Text("Refresh", fontSize = 13.sp) }
+            }
+            val list = members
+            when {
+                list == null && !err -> Muted("Loading…")
+                list == null -> Muted("Can't reach the server right now.")
+                else -> for (m in list) {
+                    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Dot(if (m.online) Palette.Ok else Palette.Warn, 10)
+                        Spacer(Modifier.width(10.dp))
+                        Text(m.name + if (m.isMe) " (you)" else "", fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Muted(if (m.online) "Online" else "Last seen ${ago(m.lastSeen)}", 12)
+                    }
+                }
+            }
+            val offline = list?.count { !it.online && !it.isMe } ?: 0
+            if (offline > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text("$offline phone${if (offline > 1) "s are" else " is"} not connected and would miss an alert right now. " +
+                     "On that phone: open Home Pager once, fix every item in its checklist, and set battery to Unrestricted.",
+                    fontSize = 12.sp, lineHeight = 17.sp, color = Palette.Warn)
+            }
+            if (pushOff) {
+                Spacer(Modifier.height(6.dp))
+                Muted("Push wake-up (FCM) is not configured in this build, so sleeping phones can take up to 15 minutes to notice an alert. See docs/FCM_SETUP.md.", 12)
+            }
+        }
+    }
+
+    private fun ago(ms: Long?): String {
+        if (ms == null) return "never"
+        val m = (System.currentTimeMillis() - ms) / 60_000
+        return when {
+            m < 1 -> "just now"; m < 60 -> "$m min ago"; m < 48 * 60 -> "${m / 60} h ago"; else -> "${m / 1440} days ago"
         }
     }
 

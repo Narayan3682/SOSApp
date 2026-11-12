@@ -32,6 +32,24 @@ class ApiTests(unittest.TestCase):
             r = c.post("/api/join", content=b"x" * 20_000, headers={"Content-Type": "application/json"})
             self.assertEqual(r.status_code, 413)
 
+    def test_phone_that_connects_late_still_gets_the_alert(self):
+        with TestClient(create_app(Store(":memory:"), setup_key="t")) as c:
+            h = c.post("/api/households", json={"household_name": "Home", "member_name": "N", "setup_key": "t"}).json()
+            j = c.post("/api/join", json={"invite_code": h["invite_code"], "member_name": "Mom"}).json()
+            r = c.post("/api/alerts", headers={"Authorization": "Bearer " + h["device_token"]},
+                       json={"alert_id": "alert-late-0001", "trigger": "volume"}).json()
+            self.assertEqual(r["delivery"][j["device_id"]], [])          # Mom was offline: nothing reached her
+            with c.websocket_connect("/ws") as ws:                        # ...until she reconnects
+                ws.send_json({"type": "auth", "token": j["device_token"]})
+                self.assertEqual(ws.receive_json()["type"], "ready")
+                m = ws.receive_json()
+                self.assertEqual((m["type"], m["alert_id"], m.get("replayed")), ("alert", "alert-late-0001", True))
+            with c.websocket_connect("/ws") as ws:                        # the sender does not get their own alert back
+                ws.send_json({"type": "auth", "token": h["device_token"]})
+                self.assertEqual(ws.receive_json()["type"], "ready")
+                c.post("/api/alerts/alert-late-0001/cancel", headers={"Authorization": "Bearer " + h["device_token"]})
+                self.assertEqual(ws.receive_json()["type"], "cancelled")
+
     def test_setup_key_enforced_and_lan_key_returned(self):
         with TestClient(create_app(Store(":memory:"), setup_key="k1")) as c:
             body = {"household_name": "Home", "member_name": "N"}

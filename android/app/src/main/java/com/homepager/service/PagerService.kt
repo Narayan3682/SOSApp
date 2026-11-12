@@ -4,6 +4,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -37,6 +41,32 @@ class PagerService : Service() {
     private var backoff = 1_000L
     private var stopped = false
     private val startNearby = Runnable { NearbyTransport.startDiscovery(this) }
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var connected = false
+
+    /** Reconnect the instant a network comes (back) up instead of waiting for the back-off timer. */
+    private fun watchNetwork() {
+        if (netCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { handler.post { poke() } }
+            override fun onCapabilitiesChanged(n: Network, c: NetworkCapabilities) {
+                if (c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) handler.post { poke() }
+            }
+        }
+        runCatching {
+            cm.registerNetworkCallback(NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), cb)
+            netCallback = cb
+        }
+    }
+
+    /** Make sure a connection attempt is in flight; cheap to call often. */
+    private fun poke() {
+        if (stopped) return
+        if (socket == null) { backoff = 1_000L; connect() }
+        else if (!connected) { socket?.cancel(); socket = null; connect() }
+        else runCatching { socket?.send("{\"type\":\"ping\"}") }
+    }
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -47,7 +77,9 @@ class PagerService : Service() {
         ServiceCompat.startForeground(this, 1, n,
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
         if (lan == null) lan = LanTransport.Receiver(this).also { it.start() }
-        if (socket == null) connect()
+        watchNetwork()
+        Keepalive.schedule(this)
+        poke()
         return START_STICKY
     }
 
@@ -62,6 +94,7 @@ class PagerService : Service() {
         socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, r: Response) {
                 ws.send(JSONObject().put("type", "auth").put("token", prefs.token).toString())
+                connected = true
                 backoff = 1_000L
                 handler.removeCallbacks(startNearby)
                 NearbyTransport.stopDiscovery(this@PagerService)   // server reachable: no need to scan
@@ -91,6 +124,7 @@ class PagerService : Service() {
     }
 
     private fun retry() {
+        connected = false
         socket = null
         if (stopped) return
         AlertBus.post("Server unreachable - listening on Wi-Fi and nearby")
@@ -102,6 +136,7 @@ class PagerService : Service() {
 
     override fun onDestroy() {
         stopped = true
+        netCallback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
         socket?.cancel()
         lan?.shutdown()
         handler.removeCallbacksAndMessages(null)
@@ -110,8 +145,8 @@ class PagerService : Service() {
     }
 
     companion object {
-        fun start(ctx: Context) {
-            ctx.startForegroundService(Intent(ctx, PagerService::class.java))
+        fun start(ctx: Context, reason: String = "app") {
+            runCatching { ctx.startForegroundService(Intent(ctx, PagerService::class.java).putExtra("reason", reason)) }
         }
     }
 }

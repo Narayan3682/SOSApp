@@ -31,6 +31,12 @@ class StoreTests(unittest.TestCase):
         self.assertIsNotNone(self.s.join(f"{code}\nSERVER: HTTPS://X\nINVITE CODE: {code}", "Dad", "pixel"))
         self.assertIsNotNone(self.s.join(f"code {code[:4]}-{code[4:]} thanks", "Kid", "nord"))
 
+    def test_pending_for_household_is_scoped(self):
+        other = self.s.create_household("Other", "X", "y")
+        self.s.create_alert("alert-mine", self.h["household_id"], self.h["device_id"], "button")
+        self.s.create_alert("alert-theirs", other["household_id"], other["device_id"], "button")
+        self.assertEqual([a["id"] for a in self.s.pending_for_household(self.h["household_id"])], ["alert-mine"])
+
     def test_no_device_limit(self):
         for i in range(25):
             self.assertIsNotNone(self.s.join(self.h["invite_code"], f"m{i}", f"d{i}"))

@@ -43,6 +43,8 @@ Delivery, all fired at once:
 Security: per-household signing key on offline packets (forged or replayed-late packets are ignored), setup key to create households, pairing rate-limit, https required off the home network (docs/TLS.md).
 In-app readiness checklist: notifications, full-screen alerts, battery, Do Not Disturb, Bluetooth/nearby, accessibility, SMS.
 
+Reliability (read this): a phone only rings if it is connected. The app reconnects on network changes, re-checks every 15 min even in deep sleep, and the server replays any unanswered alert from the last 10 min when a phone reconnects - so a sleeping phone rings late rather than never. For *instant* wake-up of sleeping phones you must set up FCM (docs/FCM_SETUP.md, ~15 min). On every phone: fix every item in the in-app checklist and set battery to Unrestricted (Motorola/Xiaomi/Oppo/Vivo/Samsung also have their own "background activity" switches). The home screen shows who is Online / Last seen so you can spot a dead phone before an emergency.
+
 Known limits: offline routes give no delivery confirmation to the sender (receivers can reply "I'm coming" over Wi-Fi only); offline alerts are not re-sent automatically; widget is tap-to-open-countdown (no swipe in widgets); no voice trigger yet; Wi-Fi power-saving can delay broadcasts to idle phones; Nearby/BLE range through walls is short. Not a certified emergency system.
 
 Tests: `server` (python -m unittest) and `android` JVM tests (`gradle :app:testFamilyDebugUnitTest`) run in CI. Offline packet, URL policy and SMS selection logic is plain Java so it is testable without a device.
