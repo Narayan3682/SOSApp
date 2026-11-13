@@ -21,6 +21,7 @@ Files: `README.md` (run it), `ARCHITECTURE.md` (routes, API), `SECURITY.md` (thr
 | `/health` → 500 | Body-size guard did `headers["content-length"]` after a `.get(..., "0")` default; header absent on GET | Dedicated `body_too_large()` with tests; missing header is fine |
 | Phone 2 join → 404 although code "was correct" | User pasted the whole share message into the code field | Server + app now extract the 8-char code from any pasted text; share text leads with the code |
 | Alert "reached 0 of 1" after a few hours | Phone 2's background connection died; nothing woke it (no FCM) | Reconnect on network change, 15-min exact alarm + WorkManager keepalive, server replays unanswered alerts on reconnect, Family card shows Online/Last seen. **FCM is still the real fix.** |
+| App says Offline the next day | PC got a new IP from the router overnight | `run.py` now prints the current address and warns when it changed; app has Server settings (tap the status pill) to test/change the address and Reconnect now. Permanent fix: DHCP reservation for the PC in the router |
 | PowerShell choked on nested quotes / `-SkipCertificateCheck` | Windows PowerShell 5 limitations | Put one-off DB tasks in small Python scripts (`remove_member.py`), use `httpx` with `verify=False` for probes |
 
 ## 3. Decisions and why
@@ -44,7 +45,7 @@ Files: `README.md` (run it), `ARCHITECTURE.md` (routes, API), `SECURITY.md` (thr
 5. Add the SOS widget and the Quick Settings tile.
 6. Verify on the **Family card** that the phone shows Online an hour later with the screen off. If it shows "Last seen", step 3/4 is incomplete.
 
-Server: `python run.py` (prints fingerprint + setup key), firewall rule for TCP 8443 on **Private** networks only, keep the PC awake (power settings) or move to a mini PC/VPS.
+Server: `python run.py` (prints fingerprint, setup key and the address phones must use). **Give the PC a fixed IP** (router → DHCP reservation) or phones will lose it when the address changes, firewall rule for TCP 8443 on **Private** networks only, keep the PC awake (power settings) or move to a mini PC/VPS.
 
 ## 5. Test it like QA
 - **Happy path**: SOS on A with B locked, screen off → B rings ≤ 2 s (WebSocket) and shows over the lock screen; "I'm coming" on B appears on A.

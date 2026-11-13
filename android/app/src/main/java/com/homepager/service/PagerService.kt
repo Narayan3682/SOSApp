@@ -43,6 +43,7 @@ class PagerService : Service() {
     private val startNearby = Runnable { NearbyTransport.startDiscovery(this) }
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var connected = false
+    private var lastError = ""
 
     /** Reconnect the instant a network comes (back) up instead of waiting for the back-off timer. */
     private fun watchNetwork() {
@@ -79,7 +80,12 @@ class PagerService : Service() {
         if (lan == null) lan = LanTransport.Receiver(this).also { it.start() }
         watchNetwork()
         Keepalive.schedule(this)
-        poke()
+        val reason = intent?.getStringExtra("reason")
+        if (reason == "settings" || reason == "manual") {
+            handler.removeCallbacksAndMessages(null)
+            socket?.cancel(); socket = null; connected = false; backoff = 1_000L
+            connect()
+        } else poke()
         return START_STICKY
     }
 
@@ -106,7 +112,16 @@ class PagerService : Service() {
             }
             override fun onMessage(ws: WebSocket, text: String) { runCatching { handle(JSONObject(text)) } }
             override fun onClosed(ws: WebSocket, code: Int, reason: String) = retry()
-            override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) = retry()
+            override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
+                lastError = when (t) {
+                    is javax.net.ssl.SSLException -> "certificate mismatch"
+                    is java.net.ConnectException -> "connection refused (server not running?)"
+                    is java.net.SocketTimeoutException -> "timed out (wrong address or firewall?)"
+                    is java.net.UnknownHostException -> "address not found"
+                    else -> t.javaClass.simpleName
+                }
+                retry()
+            }
         })
     }
 
@@ -127,7 +142,7 @@ class PagerService : Service() {
         connected = false
         socket = null
         if (stopped) return
-        AlertBus.post("Server unreachable - listening on Wi-Fi and nearby")
+        AlertBus.post("Server unreachable" + (if (lastError.isNotEmpty()) ": $lastError" else "") + " - listening on Wi-Fi and nearby")
         handler.removeCallbacks(startNearby)
         handler.postDelayed(startNearby, 10_000)      // scan only if still offline after 10 s
         handler.postDelayed({ connect() }, backoff)

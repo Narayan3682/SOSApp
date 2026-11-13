@@ -43,6 +43,8 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".ui.ServerSettingsActivity" android:exported="false" />
+
         <!-- Incoming alert: shows over the lock screen -->
         <activity android:name=".ui.AlarmActivity"
             android:exported="false"

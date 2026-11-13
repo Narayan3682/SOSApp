@@ -81,18 +81,31 @@ class MainActivity : ComponentActivity() {
                     Text("Home Pager", fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Muted("Hi ${prefs.memberName.ifEmpty { "there" }}", 14)
                 }
-                StatusPill(
-                    when {
-                        online -> "Online"
-                        status.startsWith("Server unreachable") -> "Offline mode"
-                        else -> "Connecting"
-                    },
-                    when {
-                        online -> Palette.Ok
-                        status.startsWith("Server unreachable") -> Palette.Warn
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
+                Box(Modifier.clickable { startActivity(Intent(this@MainActivity, ServerSettingsActivity::class.java)) }) {
+                    StatusPill(
+                        when {
+                            online -> "Online"
+                            status.startsWith("Server unreachable") -> "Offline · tap"
+                            else -> "Connecting · tap"
+                        },
+                        when {
+                            online -> Palette.Ok
+                            status.startsWith("Server unreachable") -> Palette.Warn
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+            if (!online) {
+                Spacer(Modifier.height(10.dp))
+                Surface(Modifier.fillMaxWidth().clickable { startActivity(Intent(this@MainActivity, ServerSettingsActivity::class.java)) },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), color = Palette.Warn.copy(alpha = 0.12f)) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("Not connected to the server", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Palette.Warn)
+                        Muted("Alerts still go out over Wi-Fi, Bluetooth and SMS, but family far away won't get them. " +
+                              "Is the server PC on? Did its address change? Tap to check or reconnect.", 12)
+                    }
+                }
             }
 
             Spacer(Modifier.height(28.dp))
@@ -124,7 +137,11 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(6.dp))
                 Muted("Others install the app, enter the same server, then join with this code. Letters only - there is no 0, O, 1 or I. No limit on devices.")
                 Spacer(Modifier.height(6.dp))
-                Muted("Server: ${prefs.serverUrl}", 12)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Muted("Server: ${prefs.serverUrl}", 12)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { startActivity(Intent(this@MainActivity, ServerSettingsActivity::class.java)) }, contentPadding = PaddingValues(0.dp)) { Text("Change", fontSize = 13.sp) }
+                }
             }
 
             Spacer(Modifier.height(14.dp))

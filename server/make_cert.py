@@ -50,6 +50,16 @@ def local_ips():
     return sorted(i for i in ips if not i.startswith("127.") and ":" not in i)
 
 
+def cert_ips():
+    """IP addresses the existing certificate was issued for."""
+    try:
+        cert = x509.load_pem_x509_certificate(open(CERT, "rb").read())
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        return [str(ip) for ip in san.get_values_for_type(x509.IPAddress)]
+    except Exception:
+        return []
+
+
 def make():
     os.makedirs("certs", exist_ok=True)
     key = ec.generate_private_key(ec.SECP256R1())
