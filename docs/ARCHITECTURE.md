@@ -15,11 +15,12 @@ SMS recipients come from a contact list cached on the phone (synced whenever it 
 REST: `POST /api/households`, `POST /api/join`, `GET /api/members`, `PUT /api/devices/fcm`, `POST /api/alerts`, `POST /api/alerts/{id}/ack|cancel|resolve`.
 WebSocket `/ws`: first message `{"type":"auth","token":...}`; server pushes `alert`, `ack`, `cancelled`, `resolved`, `escalated`.
 Auth: per-device bearer token, stored hashed (SHA-256). Alerts are idempotent on the client-generated `alert_id`.
-Escalation: no ack after `ESCALATE_AFTER_S` -> re-send, up to `MAX_REALERTS`.
+Escalation: no ack after `ESCALATE_AFTER_S` -> re-send, up to `MAX_REALERTS`; resumed after a server restart. On WebSocket connect the server replays any unanswered alert from the last 10 min to that phone (`replayed: true`).
+Transport: HTTPS on 8443 with a self-signed certificate (`run.py`); phones pin its SHA-256 fingerprint at setup.
 
 ## Android
 `Trigger.fire()` is the one entry point for every trigger -> `CountdownActivity` (5 s cancel) -> `POST /api/alerts`.
-`PagerService` (foreground) holds the WebSocket -> `AlarmController` (alarm-stream siren, vibration, full-screen intent) -> `AlarmActivity`.
+`PagerService` (foreground) holds the WebSocket (reconnects on network change; 15-min exact alarm + WorkManager keepalive) -> `AlarmController` (alarm-stream siren, vibration, full-screen intent) -> `AlarmActivity`.
 Flavors: `family` adds `VolumeKeyService` (accessibility key filter) and cleartext HTTP; `play` omits both.
 
 ## Open risks

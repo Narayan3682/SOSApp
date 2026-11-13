@@ -7,7 +7,7 @@ Emergency pager for the home using Android phones. Any phone can raise an alert;
 ## Layout
 - `server/` - Python FastAPI service (pairing, WebSocket hub, SQLite, escalation timer, optional FCM wake-up). Docker-ready.
 - `android/` - Kotlin + Jetpack Compose app, two flavors: `family` (sideload, all triggers) and `play` (Play-Store-safe subset).
-- `docs/ARCHITECTURE.md` - design, delivery tiers, status.
+- `docs/` - `PLAYBOOK.md` (start here: lessons, operating checklist, QA script), `ARCHITECTURE.md`, `SECURITY.md`, `TLS.md`, `FCM_SETUP.md`.
 
 ## Run the server (HTTPS)
 ```
